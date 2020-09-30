@@ -1,0 +1,394 @@
+---
+title: "Assignment 3"
+author: "Mel Miller"
+date: "9/23/2020"
+output: 
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+# Loading the libraries and data
+
+To create my dataset to use for this assignment, I'll first load all relevant libraries.
+
+
+```{r, results = 'hide', message = FALSE}
+library (sf)
+library (tidyverse)
+library (tidycensus)
+library (ggthemes)
+library (ggspatial)
+library (units)
+library (nngeo)
+```
+
+For this assignment, I decided to use datasets from the Boston Open Data portal. I'm interested in focusing on two point layers (public schools and public libraries), and two polygon layers (neighborhoods and open space). I'll also read in water as a dataset to provide a better visual.  
+
+Just as Carole did in the tutorial, I've set "quiet=TRUE" on each call of "st_read()" to allow for an easier read of this file.
+
+```{r}
+nhoods <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/3525b0ee6e6b427f9aab5d0a1d0a1a28_0.kml?outSR={%22latestWkid%22:2249,%22wkid%22:102686}", quiet = TRUE)
+water <- st_read("http://bostonopendata-boston.opendata.arcgis.com/datasets/2b3c0fa13b1c468eb702a3645fcc6bcb_5.kml", quiet = TRUE)
+openspace <- st_read ("http://bostonopendata-boston.opendata.arcgis.com/datasets/2868d370c55d4d458d4ae2224ef8cddd_7.kml", quiet = TRUE)
+schools <- st_read ("http://bostonopendata-boston.opendata.arcgis.com/datasets/1d9509a8b2fd485d9ad471ba2fdb1f90_0.kml?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D", quiet = TRUE)
+libraries <- st_read ("http://bostonopendata-boston.opendata.arcgis.com/datasets/cb00f9248aa6404ab741071ca3806c0e_6.kml?outSR={%22latestWkid%22:2249,%22wkid%22:102686}", quiet = TRUE)
+```
+
+## Questions to answer
+
+Using these datasets, I'll answering the following questions:
+
+1. How many libraries are in each Boston neighborhood?
+2. How many public schools are in each Boston neighborhood?
+3. What is the average distance between public schools and the nearest public library?
+4. How far is each library from open space?
+5. How many libraries in Boston are there within 50 meters of open space?
+6. What is the density of libraries (the number of libraries per square km) in each neighborhood?
+7. Which neighborhoods have open space in them?
+
+
+## Transforming the data
+
+I've followed Carole's lead and transformed my data to the Massachusetts State Plane, based on the NAD83 AEA.
+
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=41.71666666666667 +lat_2=42.68333333333333 +lat_0=41 +lon_0=-71.5 +x_0=200000 +y_0=750000 +ellps=GRS80 +units=m +no_defs"
+nhoods <- nhoods %>%
+  st_transform(MA_state_plane)
+water <- water %>%
+  st_transform(MA_state_plane)
+openspace <- openspace %>%
+  st_transform(MA_state_plane)
+schools <- schools %>%
+  st_transform(MA_state_plane)
+libraries <- libraries %>%
+  st_transform(MA_state_plane)
+```
+
+Here's a map of all this data:
+
+```{r}
+ggplot(water) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = schools, color = "coral1", size = 1) +
+  geom_sf(data = openspace, color = "lightgreen") +
+  geom_sf(data = libraries, color = "darkmagenta", size = 1) +
+  geom_sf(data = nhoods, fill = NA, color = "gray") +
+  theme_map () +
+  annotation_scale()
+```  
+
+# Figure 1
+
+How many libraries are in each Boston neighborhood?
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_libraries = lengths(st_covers(nhoods, libraries)))
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = num_libraries)) +
+  scale_fill_viridis_c(name = "Boston neighborhoods\nby number of libraries",
+                       breaks = breaks <- seq(0, 5, by = 1),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "libraries"),
+                       option = "magma") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+# Figure 2
+
+How many public schools are in each Boston neighborhood?
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_schools = lengths(st_covers(nhoods, schools)))
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = num_schools)) +
+  scale_fill_viridis_c(name = "Boston neighborhoods\nby number of public schools",
+                       breaks = breaks <- seq(0, 25, by = 5),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "schools"),
+                       option = "plasma") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+# Figure 3
+
+What is the average distance between public schools and the nearest public library?
+
+```{r}
+schools <- schools %>%
+  mutate(lib_dist = st_nn(schools, libraries, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(lib_dist = as.numeric(lib_dist))
+```
+```{r}
+avg_lib_dist <- mean(schools$lib_dist)
+
+avg_lib_dist
+```
+The average distance between Boston public schools and the nearest Boston public library is 799 meters.  
+
+I'll combine this all onto one map.
+
+```{r}
+right_side <- st_bbox(schools)$xmax
+left_side  <- st_bbox(schools)$xmin
+top_side <- st_bbox(schools)$ymax
+bottom_side <- st_bbox(schools)$ymin
+
+
+ggplot(water) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = schools, size = 1.5,
+          aes(color = lib_dist)) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_viridis_c(name = 
+                          "Boston public schools by\ndistance (m) to a public library",
+                        breaks = breaks <- seq(0, 3000, by = 600),
+                        option = "inferno") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 300, 
+           y = top_side - 1500, 
+           label = paste("On average, a Boston public school\nis ", 
+                         prettyNum(avg_lib_dist, digits = 0),
+                         " meters from a library.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "beige"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+# Figure 4
+
+How far is each library from open space? 
+
+```{r}
+libraries <- libraries %>%
+  mutate(openspace_dist = st_nn(libraries, openspace, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(openspace_dist = as.numeric(openspace_dist))
+```
+
+```{r}
+avg_openspace_dist <- mean (libraries$openspace_dist)
+avg_openspace_dist
+```
+
+The average distance from a library to the nearest open space is 108 meters.  
+
+I'll provide a map to show how far each library is from open space.
+
+```{r}
+right_side <- st_bbox(libraries)$xmax
+left_side  <- st_bbox(libraries)$xmin
+top_side <- st_bbox(libraries)$ymax
+bottom_side <- st_bbox(libraries)$ymin
+
+ggplot(water) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = libraries, size = 2,
+          aes(color = openspace_dist)) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_viridis_c(name = 
+                          "Boston public library meters\nby distance to open space",
+                        breaks = breaks <- seq(0, 350, by = 75),
+                        option = "magma") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 300, 
+           y = top_side - 900, 
+           label = paste("On average, a Boston public library\nis ", 
+                         prettyNum(avg_openspace_dist, digits = 3),
+                         " meters from open space.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "beige"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+# Figure 5
+
+How many libraries in Boston are there within 50 meters of open space?  
+
+To figure this out, I'll create a new polygon layer representing a 50-meter buffer around the open space in Boston. 
+
+```{r}
+openspace_buffer <- st_buffer(openspace, dist = 50) %>%
+  st_union()
+ggplot(openspace_buffer) +
+  geom_sf() +
+  theme_map()
+```
+I'll create a data frame that only includes open spaces that are located within the library buffer. I'll draw them on top of the library buffer.
+
+```{r}
+libraries_openspace <- libraries[openspace_buffer,]
+  
+ggplot(openspace_buffer) +
+  geom_sf() +
+  geom_sf(data = libraries_openspace, 
+          color = "darkmagenta") +
+  theme_map()
+```
+
+Now I'll join the two dataframes for open space.
+
+```{r}
+libraries <- libraries %>%
+  st_join(libraries_openspace) %>%
+  mutate (by_openspace = !is.na(Name.y))
+```
+
+I'll calculate how many libraries are within 50 meters of open space.
+
+```{r}
+n_openspace_libraries <-sum(libraries$by_openspace)
+n_openspace_libraries
+```
+
+There are 10 libraries within 50 meters of open space. I'll now calculate what percent of all libraries in Boston this represents.
+
+```{r}
+n_libraries <- length (libraries$by_openspace)
+pct_openspace_libraries <- n_openspace_libraries / n_libraries
+pct_openspace_libraries
+```
+
+Nearly 40% of libraries are within 50 meters of open space. I'll combine all of this work onto one map.
+
+```{r}
+left_side  <- st_bbox(libraries)$xmin
+top_side <- st_bbox(libraries)$ymax
+
+ggplot(water) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = libraries, size = 1,
+          aes(color = by_openspace)) +
+    coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_manual(values = c("darkmagenta", "violet"),
+          name = "Boston public ibraries\nby distance to open space", 
+          labels = c("No open space within 50 m",
+                     "Open space within 50 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 1000, 
+           y = top_side - 2500, 
+           label = paste("Of the ", 
+                         prettyNum(n_libraries, big.mark = ","),
+                         " public libraries in Boston,\n", 
+                         prettyNum(n_openspace_libraries, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_openspace_libraries, digits = 0),
+                         "%) are within 50\nmeters of open space.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "beige"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+# Figure 6
+
+What is the density of libraries (the number of libraries per square km) in each neighborhood?
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(area = set_units(st_area(nhoods), km^2)) %>%
+  mutate(lib_dens = as.numeric(num_libraries / area))
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = lib_dens)) +
+    scale_fill_viridis_c(name = 
+                           "Boston neighborhoods\nby library density",
+                         breaks = breaks <- seq(0, 2, by = .5),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "libraries per square km"),
+                       option = "magma") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+    legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+# Figure 7
+
+Which neighborhoods have open space in them?  
+
+I'll first identify overlapping neighborhood and open space polygons.
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_openspace = lengths(st_overlaps(nhoods, openspace))) %>%
+  mutate(has_openspace = num_openspace > 0)
+```
+
+```{r}
+n_openspace_nhoods <- sum(nhoods$has_openspace)
+n_openspace_nhoods
+```
+
+Open space is found in all but one Boston neighborhood (Bay Village).  
+
+Now, I'll map this data.
+
+```{r}
+left_side  <- st_bbox(openspace)$xmin
+top_side <- st_bbox(openspace)$ymax
+ggplot(openspace) +
+  geom_sf(fill = "darkgreen", color = NA) +
+  geom_sf(data = nhoods,
+          aes(fill = has_openspace)) +
+  scale_fill_manual(values = c("maroon", "lightgreen"),
+          name = "Boston neighborhoods\nby presence of open space", 
+          labels = c("Neighborhood without\nopenspace",
+                     "Neighborhood with\nopenspace")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side - 1000, 
+           label = paste(n_openspace_nhoods ,
+                         "of Boston's", 
+                         length(nhoods$Name),
+                         "neighborhoods\noverlap with", 
+                         "openspace."),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "lightgray"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
