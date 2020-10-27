@@ -5,7 +5,7 @@ date: "10/22/2020"
 output: html_document
 ---
 
-For this assignment I've created an interactive map of the 30 hospitals within Boston. Since the data wasn't entered consistently or fully (e.g., some hospitals names were fully capitalized; some addresses were incomplete) I first cleaned the data (specifically the hospital name and address). The final map is displayed below.
+For this assignment I've created an interactive map of the 30 hospitals within Boston. Since the data wasn't entered consistently or fully (e.g., some hospitals names were fully capitalized; some addresses were incomplete) I first cleaned the data (specifically the hospital name and address). The map is displayed below.
 
 ```{r}
 library(tidyverse)
