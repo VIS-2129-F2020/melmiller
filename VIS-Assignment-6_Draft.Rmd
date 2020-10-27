@@ -1,0 +1,76 @@
+---
+title: "Vis-Assignment-6_DRAFT"
+author: "Mel Miller"
+date: "10/22/2020"
+output: html_document
+---
+
+For this assignment I've created an interactive map of the 30 hospitals within Boston. Since the data wasn't entered consistently or fully (e.g., some hospitals names were fully capitalized; some addresses were incomplete) I first cleaned the data (specifically the hospital name and address). The final map is displayed below.
+
+```{r}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+```
+
+```{r}
+hospitals <- st_read("https://bostonopendata-boston.opendata.arcgis.com/datasets/8f1e5741a4ee4c0f82925d17aab3c002_2.geojson?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D",
+                      quiet = TRUE)
+
+hospitals <- as.data.frame(hospitals)
+
+hospitals$Name [hospitals$Name=="BOSTON VETERAN CENTER"] <- "Boston Veteran Center"
+hospitals$Name [hospitals$Name=="Erich LIindemann Mental Health Center"] <- "Erich Lindemann Mental Health Center"
+hospitals$Name [hospitals$Name=="Beth Isreal Deaconess medical Center - East Campus"] <- "Beth Isreal Deaconess Medical Center - East Campus"
+hospitals$Address [hospitals$Address=="665 BEACON STREET"] <- "665 Beacon St, Boston, MA 02215"
+hospitals$Address [hospitals$Address=="110 Francis Street"] <- "110 Francis St, Boston, MA 02215"
+hospitals$Address [hospitals$Address=="1 Boston Medical Center Pl. Boston, 02118"] <- "1 Boston Medical Center Pl, Boston, 02118"
+hospitals$Address [hospitals$Address=="2100 Dorchester Ave, Dorchester, MA, 02124"] <- "2100 Dorchester Ave, Boston, MA, 02124"
+hospitals$Address [hospitals$Address=="736 Cambridge St. Boston, 02135"] <- "736 Cambridge St, Boston, 02135"
+hospitals$Address [hospitals$Address=="750 Washington St. Boston, 02111"] <- "750 Washington St, Boston, 02111"
+hospitals$Address [hospitals$Address=="150 South Huntington Ave. Boston, 02130"] <- "150 South Huntington Ave, Boston, 02130"
+hospitals$Address [hospitals$Address=="88 East Newton Stret"] <- "88 East Newton St, Boston, MA 02118"
+hospitals$Address [hospitals$Address=="125 Parker Hill Avenue"] <- "125 Parker Hill Ave, Boston, MA 02120"
+hospitals$Address [hospitals$Address=="251 CAUSEWAY STREET"] <- "251 Causeway St, Boston, MA 02114"
+hospitals$Address [hospitals$Address=="25 STANIFORD STREET"] <- "25 Staniford St, Boston, MA 02114"
+hospitals$Address [hospitals$Address=="581 BOYLSTON STREET"] <- "581 Boylston St, Boston, MA 02116"
+hospitals$Address [hospitals$Address=="  ALBANY ST"] <- "774 Albany St, Boston, MA 02118"
+hospitals$Address [hospitals$Address=="  THIRTEENTH ST"] <- "149 13th St, Boston, MA 02129"
+hospitals$Address [hospitals$Address=="255 265 CHARLES ST"] <- "255-265 Charles St, Boston, MA 02114"
+```
+
+```{r}
+
+hospitals$NameAddy <-
+  paste(hospitals$Name, "<br>",
+        hospitals$Address) %>%
+  lapply(htmltools::HTML)
+
+
+hospitals_map <- leaflet(hospitals) %>%
+  addProviderTiles(providers$Esri.WorldGrayCanvas) %>%
+  addCircles(fillColor = "purple", color="purple",
+             stroke = FALSE, radius = 175,
+             highlightOptions = highlightOptions(fillColor = "darkmagenta",
+                                                 fillOpacity = 1),
+             popup = ~NameAddy,
+             label = ~Name) %>%
+  setMaxBounds(lng1 = -71.318289,
+               lat1 = 42.273906,
+               lng2 = -70.931518,
+               lat2 = 42.443105) %>%
+  addControl("Hospitals in Boston", position = "topright") %>%
+  addControl('<a href="https://bostonopendata-boston.opendata.arcgis.com/datasets/8f1e5741a4ee4c0f82925d17aab3c002_2.geojson?outSR=%7B%22latestWkid%22%3A2249%2C%22wkid%22%3A102686%7D">Data source</a>',
+             position = "bottomright") 
+
+hospitals_map 
+```
+
+
+
+```{r}
+saveWidget(hospitals_map, file = "Assignment-6_map.html")
+```
+
