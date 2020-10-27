@@ -40,7 +40,7 @@ trees <- st_read ("http://bostonopendata-boston.opendata.arcgis.com/datasets/ce8
 libraries <- st_read ("http://bostonopendata-boston.opendata.arcgis.com/datasets/cb00f9248aa6404ab741071ca3806c0e_6.kml?outSR={%22latestWkid%22:2249,%22wkid%22:102686}", quiet = TRUE)
 ```
 
-# Transforming the data
+# Transforming the data!
 
 Since I'm interested in distance (and probably area calculations), I've followed Carole's lead and transformed my data to the Massachusetts State Plane, based on the NAD83 AEA.
 
